@@ -1,0 +1,22 @@
+#include <FlixPeriph.h>
+#include <SPI.h>
+
+MPU9250 IMU(SPI);
+
+void setup() {
+    Serial.begin(115200);
+    bool success = IMU.begin();
+    if (!success) {
+        Serial.println("Failed to initialize IMU");
+    }
+}
+
+void loop() {
+    IMU.waitForData();
+
+    float gx, gy, gz;
+    IMU.getGyro(gx, gy, gz);
+
+    Serial.printf("gx:%f gy:%f gz:%f\n", gx, gy, gz);
+    delay(50); 
+}

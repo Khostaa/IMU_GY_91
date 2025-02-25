@@ -1,0 +1,57 @@
+#include <FlixPeriph.h>
+#include <SPI.h>
+
+MPU9250 IMU(SPI);
+
+float gyroBiasX, gyroBiasY, gyroBiasZ; 
+
+void calibrateGyro() {
+    const int samples = 1000;
+    Serial.println("Calibrating gyro, stand still");
+
+    gyroBiasX = 0;
+    gyroBiasY = 0;
+    gyroBiasZ = 0;
+
+    for (int i = 0; i < samples; i++) {
+        IMU.waitForData();
+        float gx, gy, gz;
+        IMU.getGyro(gx, gy, gz);
+        gyroBiasX += gx;
+        gyroBiasY += gy;
+        gyroBiasZ += gz;
+    }
+
+    gyroBiasX = gyroBiasX / samples;
+    gyroBiasY = gyroBiasY / samples;
+    gyroBiasZ = gyroBiasZ / samples;
+
+    Serial.printf("Gyro bias X: %f\n", gyroBiasX);
+    Serial.printf("Gyro bias Y: %f\n", gyroBiasY);
+    Serial.printf("Gyro bias Z: %f\n", gyroBiasZ);
+}
+
+
+void setup() {
+    Serial.begin(115200);
+    bool success = IMU.begin();
+    if (!success) {
+        Serial.println("Failed to initialize IMU");
+    }
+    calibrateGyro();
+}
+
+void loop() {
+    float gx, gy, gz;
+    IMU.waitForData();
+    IMU.getGyro(gx, gy, gz);
+
+
+    gx -= gyroBiasX;
+    gy -= gyroBiasY;
+    gz -= gyroBiasZ;
+
+    Serial.printf("gx:%f gy:%f gz:%f\n", gx, gy, gz);
+    delay(50); 
+}
+

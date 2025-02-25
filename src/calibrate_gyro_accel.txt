@@ -1,0 +1,91 @@
+#include <FlixPeriph.h>
+#include <SPI.h>
+
+MPU9250 IMU(SPI);
+
+float gyroBiasX, gyroBiasY, gyroBiasZ; 
+float accBiasX, accBiasY, accBiasZ;
+
+void calibrateGyro() {
+    const int samples = 1000;
+    Serial.println("Calibrating gyro, stand still");
+
+    gyroBiasX = 0;
+    gyroBiasY = 0;
+    gyroBiasZ = 0;
+
+    for (int i = 0; i < samples; i++) {
+        IMU.waitForData();
+        float gx, gy, gz;
+        IMU.getGyro(gx, gy, gz);
+        gyroBiasX += gx;
+        gyroBiasY += gy;
+        gyroBiasZ += gz;
+    }
+
+    gyroBiasX = gyroBiasX / samples;
+    gyroBiasY = gyroBiasY / samples;
+    gyroBiasZ = gyroBiasZ / samples;
+
+    Serial.printf("Gyro bias X: %f\n", gyroBiasX);
+    Serial.printf("Gyro bias Y: %f\n", gyroBiasY);
+    Serial.printf("Gyro bias Z: %f\n", gyroBiasZ);
+}
+void calibrateAccel(){
+        const int samples = 1000;
+    Serial.println("Calibrating Accel, stand still");
+
+    accBiasX = 0;
+    accBiasY = 0;
+    accBiasZ = 0;
+
+    for (int i = 0; i < samples; i++) {
+        IMU.waitForData();
+        float ax, ay, az;
+        IMU.getAccel(ax, ay, az);
+        accBiasX += ax;
+        accBiasY += ay;
+        accBiasZ += az;
+    }
+
+    accBiasX = accBiasX / samples;
+    accBiasY = accBiasY / samples;
+    accBiasZ = accBiasZ / samples;
+
+    Serial.printf("Accel bias X: %f\n", accBiasX);
+    Serial.printf("Accel bias Y: %f\n", accBiasY);
+    Serial.printf("Accel bias Z: %f\n", accBiasZ);
+
+}
+
+
+void setup() {
+    Serial.begin(115200);
+    bool success = IMU.begin();
+    if (!success) {
+        Serial.println("Failed to initialize IMU");
+    }
+    calibrateGyro();
+    calibrateAccel();
+}
+
+void loop() {
+    float gx, gy, gz, ax, ay, az;
+    IMU.waitForData();
+    IMU.getGyro(gx, gy, gz);
+    IMU.getAccel(ax, ay, az);
+
+
+    gx -= gyroBiasX;
+    gy -= gyroBiasY;
+    gz -= gyroBiasZ;
+
+    ax -= accBiasX;
+    ay -= accBiasY;
+    az -= accBiasZ;
+
+    Serial.printf("gx:%f gy:%f gz:%f\n", gx, gy, gz);
+    Serial.printf("ax:%f ay:%f az:%f\n", ax, ay, az);
+    delay(50); 
+}
+
