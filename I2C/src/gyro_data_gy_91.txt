@@ -1,0 +1,151 @@
+#include <Wire.h>
+#include <Arduino.h>
+
+#define MPU_ADDR 0x68
+#define WHO_AM_I_REG 0x75
+
+float RatePitch, RateRoll, RateYaw;
+bool sensorOK = false;
+uint8_t mpuType = 0; // 0=unknown, 1=MPU6050, 2=MPU9250
+
+bool initMPU() {
+    // Wake up sensor
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(0x6B);    // PWR_MGMT_1 register
+    Wire.write(0x00);    // Clear sleep mode bit (6), enable all sensors
+    if (Wire.endTransmission() != 0) {
+        return false;
+    }
+    delay(100);  // Wait for sensor to stabilize
+
+    // Configure gyro
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(0x1B);    // GYRO_CONFIG register
+    Wire.write(0x08);    // 500 deg/s full scale
+    if (Wire.endTransmission() != 0) {
+        return false;
+    }
+
+    // Configure low pass filter
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(0x1A);    // CONFIG register
+    Wire.write(0x03);    // Set DLPF_CFG to 3 for 41Hz bandwidth
+    if (Wire.endTransmission() != 0) {
+        return false;
+    }
+
+    return true;
+}
+
+void readGyroData() {
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(0x43);  // Starting with register 0x43 (GYRO_XOUT_H)
+    Wire.endTransmission(false);
+    Wire.requestFrom((uint8_t)MPU_ADDR, (uint8_t)6);  // Read 6 registers total
+
+    if (Wire.available() == 6) {
+        int16_t gyroX = Wire.read() << 8 | Wire.read();
+        int16_t gyroY = Wire.read() << 8 | Wire.read();
+        int16_t gyroZ = Wire.read() << 8 | Wire.read();
+
+        // Convert to degrees per second (±500 dps range)
+        RateRoll = gyroX / 65.5;   // LSB Sensitivity = 65.5 LSB/dps
+        RatePitch = gyroY / 65.5;
+        RateYaw = gyroZ / 65.5;
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    while (!Serial) delay(10);
+
+    pinMode(LED_BUILTIN, OUTPUT);
+
+    // Initialize I2C
+    Wire.begin(21, 22);  // SDA = 21, SCL = 22
+    Wire.setClock(100000);  // Set to 100kHz for better stability
+
+    delay(150); // Add delay for sensor startup
+
+    Serial.println("\nChecking MPU connection...");
+    
+    // Check WHO_AM_I
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(WHO_AM_I_REG);
+    Wire.endTransmission(false);
+    Wire.requestFrom(MPU_ADDR, 1);
+    
+    if (Wire.available()) {
+        byte whoAmI = Wire.read();
+        Serial.print("WHO_AM_I returned: 0x");
+        Serial.println(whoAmI, HEX);
+        
+        if (whoAmI == 0x70 || whoAmI == 0x68) {  // MPU6050
+            Serial.println("MPU6050 detected!");
+            mpuType = 1;
+            sensorOK = true;
+        } else if (whoAmI == 0x71 || whoAmI == 0x73) {  // MPU9250/MPU9255
+            Serial.println("MPU9250/9255 detected!");
+            mpuType = 2;
+            sensorOK = true;
+        } else {
+            Serial.println("Unknown sensor type!");
+            sensorOK = false;
+        }
+    } else {
+        Serial.println("Failed to read WHO_AM_I!");
+        sensorOK = false;
+    }
+
+    if (sensorOK) {
+        if (initMPU()) {
+            Serial.println("MPU initialized successfully!");
+            // Blink LED twice to indicate success
+            for(int i = 0; i < 2; i++) {
+                digitalWrite(LED_BUILTIN, HIGH);
+                delay(100);
+                digitalWrite(LED_BUILTIN, LOW);
+                delay(100);
+            }
+        } else {
+            Serial.println("Failed to initialize MPU!");
+            sensorOK = false;
+        }
+    }
+
+    if (!sensorOK) {
+        Serial.println("Sensor setup failed! Check connections.");
+        // Blink LED rapidly to indicate error
+        while (1) {
+            digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+            delay(100);
+        }
+    }
+
+    // Let's verify the registers
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(0x1B); // GYRO_CONFIG register
+    Wire.endTransmission(false);
+    Wire.requestFrom(MPU_ADDR, 1);
+    if (Wire.available()) {
+        byte gyroConfig = Wire.read();
+        Serial.print("GYRO_CONFIG: 0x");
+        Serial.println(gyroConfig, HEX);
+    }
+}
+
+void loop() {
+    if (sensorOK) {
+        readGyroData();
+        
+        // Print the values
+        Serial.print("Gyro (deg/s) | ");
+        Serial.print("Roll: ");
+        Serial.print(RateRoll, 2);
+        Serial.print(" | Pitch: ");
+        Serial.print(RatePitch, 2);
+        Serial.print(" | Yaw: ");
+        Serial.println(RateYaw, 2);
+    }
+    delay(50);  // 20Hz update rate
+}

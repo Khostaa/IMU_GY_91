@@ -1,0 +1,88 @@
+// code to calcualte gyro rate
+
+# include <Wire.h>
+#include <Arduino.h>
+
+
+#define MPU_ADDR 0x68 // MPU9250 I2C address
+
+float RatePitch, RateRoll, RateYaw;
+
+
+void gyro_signals(void){
+    // start I2C communication with gyro
+
+    // switch on low pass filter
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(0x1A);
+    Wire.write(0x05); // set DLPF_CFG to 5 for 10Hz bandwidth
+    Wire.endTransmission();
+
+    // set the sensitivity factor/configure gyro
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(0x1B); // gyro_config register
+    Wire.write(0x08); // ±500 degrees/second full scale
+    Wire.endTransmission();
+
+    //access registers storing gyro measurements
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(0x43); //Starting register for gyro readings
+    Wire.endTransmission(false);
+
+    Wire.requestFrom((uint8_t)MPU_ADDR, (uint8_t)6);  // Request 6 bytes for 6 registers from 43 to 48, release bus after
+
+    if(Wire.available() == 6){
+        // read the gyro measurements around the each axis
+        int16_t GyroX=Wire.read()<<8 | Wire.read(); // for gyro_xout
+        int16_t GyroY=Wire.read()<<8 | Wire.read(); // for gyro_yout
+        int16_t GyroZ=Wire.read()<<8 | Wire.read(); // for gyro_zout
+
+        // convert the gyro measurements to degrees per second
+        // since gyro sensitivity is 65.5 LSB/(degrees/second) for +- 500 dps and FS_SEL = 1
+        RateRoll=GyroX/65.5;
+        RatePitch=GyroY/65.5;
+        RateYaw=GyroZ/65.5; 
+    }
+}
+void setup() {
+    Serial.begin(57600);
+
+    pinMode(2, OUTPUT);
+    digitalWrite(2, HIGH);
+
+    Wire.setClock(400000);
+    Wire.begin();
+    delay(250); // delya for sensor startup
+
+    // start the gyro in power modoe
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(0x6B); // PWR_MGMT_1 register
+    Wire.write(0x00); // Set to zero to wake up          
+    Wire.endTransmission();
+
+    // Verify sensor communication
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(0x75);  // WHO_AM_I register
+    Wire.endTransmission();
+    Wire.requestFrom(MPU_ADDR, 1);
+    
+    if(Wire.available()) {
+        byte whoAmI = Wire.read();
+        Serial.print("WHO_AM_I: 0x");
+        Serial.println(whoAmI, HEX);
+        if(whoAmI != 0x70) {  // MPU9250 should return 0x71
+            Serial.println("Error: MPU9250 not detected!");
+            while(1) delay(10);
+        }
+    }
+}
+void loop(){
+    gyro_signals();
+    Serial.print("RateRoll: ");
+    Serial.print(RateRoll);
+    Serial.print(" RatePitch: ");
+    Serial.print(RatePitch);
+    Serial.print(" RateYaw: ");
+    Serial.println(RateYaw);
+    delay(50); // wait 50ms after each loop
+}
